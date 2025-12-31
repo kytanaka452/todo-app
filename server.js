@@ -6,11 +6,18 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'todos.json');
 
+// Vercelのサーバーレス環境ではメモリ内にデータを保存
+let memoryTodos = [];
+const isVercel = process.env.VERCEL === '1';
+
 app.use(express.json());
 app.use(express.static('public'));
 
 // データファイルの初期化
 async function initDataFile() {
+  if (isVercel) {
+    return;
+  }
   try {
     await fs.access(DATA_FILE);
   } catch {
@@ -20,6 +27,9 @@ async function initDataFile() {
 
 // Todoの読み込み
 async function readTodos() {
+  if (isVercel) {
+    return memoryTodos;
+  }
   try {
     const data = await fs.readFile(DATA_FILE, 'utf8');
     return JSON.parse(data);
@@ -31,6 +41,10 @@ async function readTodos() {
 
 // Todoの保存
 async function writeTodos(todos) {
+  if (isVercel) {
+    memoryTodos = todos;
+    return;
+  }
   try {
     await fs.writeFile(DATA_FILE, JSON.stringify(todos, null, 2));
   } catch (error) {
@@ -118,12 +132,16 @@ app.delete('/api/todos/:id', async (req, res) => {
   }
 });
 
-// サーバー起動
-async function startServer() {
-  await initDataFile();
-  app.listen(PORT, () => {
-    console.log(`Todo app is running on http://localhost:${PORT}`);
-  });
+// ローカル環境でのみサーバーを起動
+if (!isVercel) {
+  async function startServer() {
+    await initDataFile();
+    app.listen(PORT, () => {
+      console.log(`Todo app is running on http://localhost:${PORT}`);
+    });
+  }
+  startServer();
 }
 
-startServer();
+// Vercel用にエクスポート
+module.exports = app;
